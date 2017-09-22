@@ -1,0 +1,17 @@
+VARIABLES SECTION
+
+FILE <measurment> =TR;
+STRING <xpm_path> = 'C:\Users\Public\Documents\Bruker\OPUS_7.5.18\XPM\';
+STRING <xpm_file> = 'MeasureSample.mtx';
+
+PROGRAM SECTION
+
+<measurment> = MeasureSample (0, {EXP=<xpm_file>, XPP=<xpm_path>});
+
+PARAMETER SECTION
+
+INP=C:\Users\Public\Documents\Bruker\OPUS_7.5.18\METHODS;
+IFP=C:\Users\Public\Documents\Bruker\OPUS_7.5.18\METHODS;
+INM=DEFAULT;
+IFN=DEFAULT;
+   
