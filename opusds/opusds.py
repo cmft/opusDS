@@ -37,6 +37,8 @@ class OpusDS(Device):
 
     IP = device_property(dtype=str)
     OPUS_MACRO_PATH = device_property(dtype=str)
+    ALIGNMENT_SCAN_PATH = device_property(dtype=str)
+    ALIGNMENT_SCAN_FILENAME = device_property(dtype=str)
 
     def init_device(self):
         Device.init_device(self)
@@ -151,7 +153,7 @@ class OpusDS(Device):
         self.set_state(PyTango.DevState.RUNNING)
 
         if macro_args is not None:
-            nargs = len(f.split())/2
+            nargs = len(macro_args)
             ans = self._runOpusCmd("RUN_MACRON", "{0} {1}".format(macro_path),
                              nargs)
 
@@ -160,7 +162,10 @@ class OpusDS(Device):
                 self.set_status(ans)
                 return
 
-            ans = self._runOpusCmd("WRITE_PARAMETER", macro_args)
+            for i in range(nargs):
+                self._runOpusCmd("WRITE_PARAMETER",
+                                 "{0} {1}".format(macro_args[i][0],
+                                                  macro_args[i][1]))
         else:
             ans = self._runOpusCmd("RUN_MACRON", macro_path)
 
@@ -175,10 +180,9 @@ class OpusDS(Device):
     def runOpusMeasureSample(self):
 
         if self._xpm_filename is not None:
-            macro = "{0}/{1}".format(self.OPUS_MACRO_PATH, "MeasureSample.mtx")
+            macro = os.path.join(self.OPUS_MACRO_PATH, "MeasureSample.mtx")
             path, file = self._xpm_filename.rsplit('/')
-            self.runOpusMacro(macro, "xpm_path {0} xpm_file {}".format(path,
-                                                                       file))
+            self.runOpusMacro(macro, [("pth", path), ("fil",file)])
         else:
             msg = 'XPM file has not been set'
             self.set_status(msg)
@@ -193,15 +197,25 @@ class OpusDS(Device):
                   'not be executed'.format(self.get_state())
             raise Exception(msg)
 
+        # TODO
+        alignment_file = os.path.join(self.ALIGNMENT_SCAN_PATH,
+                                      self.ALIGNMENT_SCAN_FILENAME)
+        ans = self._runOpusCmd("READ_FROM_FILE {0}".format(alignment_file))
+        # file_id = ans.split('\n')[1]
+
         self._runOpusCmd("FILE_PARAMETERS")
         self.set_state(PyTango.DevState.RUNNING)
         ans = self._runOpusCmd("READ_PARAMETER", "PKA")
         if 'OK\n' in ans:
             self._setStateOn()
-            return float(ans.split('\n')[1])
+            pka = float(ans.split('\n')[1])
         else:
             self.set_state(PyTango.DevState.ALARM)
-            return float("NaN")
+            pka = float("NaN")
+
+        self._runOpusCmd("UNLOAD_FILE {0}".format(alignment_file))
+
+        return pka
 
     @command()
     def abortMacro(self):

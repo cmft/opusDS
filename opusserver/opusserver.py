@@ -18,6 +18,8 @@ class SocketListenerThread(Thread):
         self.serve = True
         self.clientsock = None
         self.createFileHandle()
+        self._last_cmd = None
+        self._numParm = 0
 
     def runOpus(self):
         subprocess.call(['C:\Program Files (x86)\Bruker\OPUS_7.5.18\opus.exe',
@@ -96,12 +98,31 @@ class SocketListenerThread(Thread):
             else:
                 return "{0}\n".format('Pipe is not connected')
 
+        if cmd.startwith('rm '):
+            path = cmd.split('rm ')
+            files = glob.glob('{0}/*'.format(path))
+            for f in files:
+                os.remove(f)
+            return "ok\n"
+
         cmd = "{0}\n".format(cmd)
         print("writing... {0}".format(cmd))
         win32file.WriteFile(self.fileHandle, cmd)
         time.sleep(1)
         print("Reading...")
+        if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd:
+            # Parse cmd to get the expected parameters
+            try:
+                self._numParm = int(a.rsplit(' ', 1)[1])
+            except ValueError:
+                self._numParm = 0
+        elif "WRITE_PARAMETER" in cmd and self._numParm > 0:
+            self._numParm -= 1
+            return "\n"
+        else:
+            self._numParm = 0
         data = self.readFileHandle()
+        self._last_cmd = cmd
         print "Data: ", data
         return "{0}\n".format(data)
 
