@@ -98,12 +98,12 @@ class SocketListenerThread(Thread):
             else:
                 return "{0}\n".format('Pipe is not connected')
 
-        if cmd.startwith('rm '):
-            path = cmd.split('rm ')
-            files = glob.glob('{0}/*'.format(path))
-            for f in files:
-                os.remove(f)
-            return "ok\n"
+#        if cmd.startwith('rm '):
+#            path = cmd.split('rm ')
+#            files = glob.glob('{0}/*'.format(path))
+#            for f in files:
+#                os.remove(f)
+#            return "ok\n"
 
         cmd = "{0}\n".format(cmd)
         print("writing... {0}".format(cmd))
