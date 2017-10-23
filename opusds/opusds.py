@@ -128,13 +128,13 @@ class OpusDS(Device):
     def args(self, args):
         self._args = args
 
-    @attribute(label="xpm_file", dtype=str)
-    def xpm_file(self):
-        return self._xpm_file
+    @attribute(label="xpm_filename", dtype=str)
+    def xpm_filename(self):
+        return self._xpm_filename
 
-    @xpm_file.write
-    def xpm_file(self, args):
-        self._xpm_file = xpm_file
+    @xpm_filename.write
+    def xpm_filename(self, filename):
+        self._xpm_filename = filename
 
     ###########################################################################
     # Commands
@@ -144,7 +144,7 @@ class OpusDS(Device):
         self._createSocket()
 
     def runOpusMacro(self, macro_path, macro_args=None):
-        if not _isRunOpusCmdAllowed:
+        if not self._isRunOpusCmdAllowed:
             msg = 'The device is {0}.\n' \
                   'The RUN_MACRO command can ' \
                   'not be executed'.format(self.get_state())
@@ -154,8 +154,8 @@ class OpusDS(Device):
 
         if macro_args is not None:
             nargs = len(macro_args)
-            ans = self._runOpusCmd("RUN_MACRON", "{0} {1}".format(macro_path),
-                             nargs)
+            ans = self._runOpusCmd("RUN_MACRON", "{0} {1}".format(macro_path,
+                                                                  nargs))
 
             if "ok" not in ans:
                 self.set_state(PyTango.DevState.ALARM)
@@ -181,7 +181,8 @@ class OpusDS(Device):
 
         if self._xpm_filename is not None:
             macro = os.path.join(self.OPUS_MACRO_PATH, "MeasureSample.mtx")
-            path, file = self._xpm_filename.rsplit('/')
+            path = self.OPUS_MACRO_PATH
+            file = self._xpm_filename
             self.runOpusMacro(macro, [("pth", path), ("fil",file)])
         else:
             msg = 'XPM file has not been set'

@@ -63,16 +63,16 @@ while True:
     if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd:
         # Parse cmd to get the expected parameters
         try:
-            self._numParm = int(a.rsplit(' ', 1)[1])
+            _numParm = int(a.rsplit(' ', 1)[1])
         except ValueError:
-            self._numParm = 0
-    elif "WRITE_PARAMETER" in cmd and self._numParm > 0:
-        self._numParm -= 1
+            _numParm = 0
+    elif "WRITE_PARAMETER" in cmd and _numParm > 0:
+        _numParm -= 1
         data = "\n"
     else:
-        self._numParm = 0
+        _numParm = 0
 
-    if "WRITE_PARAMETER" in cmd and self._NumParm > 0:
+    if "WRITE_PARAMETER" in cmd and _NumParm > 0:
         data = ''
     else:
         data = readPipe()
