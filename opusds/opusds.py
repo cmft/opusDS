@@ -101,7 +101,7 @@ class OpusDS(Device):
     def _getMacroState(self):
         if self._macro_id is not None:
             ans = self._runOpusCmd("MACRO_RESULTS", self._macro_id)
-            if 'OK\n' in ans:
+            if 'OK\n' in ans.upper():
                 if int(ans.split('\n')[1]) == 1:
                     self._setStateOn()
                 else:
@@ -157,7 +157,7 @@ class OpusDS(Device):
             ans = self._runOpusCmd("RUN_MACRON", "{0} {1}".format(macro_path,
                                                                   nargs))
 
-            if "ok" not in ans:
+            if "OK" not in ans.upper():
                 self.set_state(PyTango.DevState.ALARM)
                 self.set_status(ans)
                 return
@@ -169,7 +169,7 @@ class OpusDS(Device):
         else:
             ans = self._runOpusCmd("RUN_MACRON", macro_path)
 
-        if "OK\n" in ans:
+        if "OK\n" in ans.upper():
             self._macro_id = ans.split('\n')[1]
             self.opusState.enabledEv.set()
         else:
