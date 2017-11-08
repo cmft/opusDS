@@ -82,7 +82,7 @@ class OpusDS(Device):
         else:
             opus_cmd = "{0}".format(cmd.upper())
         try:
-            self.sock.sendall(opus_cmd)
+            self.sock.sendall(opus_cmd + '\n')
             ans = self.sock.recv(4096)
             return ans
         except:
@@ -143,7 +143,8 @@ class OpusDS(Device):
     def connect(self):
         self._createSocket()
 
-    def runOpusMacro(self, macro_path, macro_args=None):
+    @command()
+    def runOpusMeasureSample(self):
         if not self._isRunOpusCmdAllowed:
             msg = 'The device is {0}.\n' \
                   'The RUN_MACRO command can ' \
@@ -152,38 +153,23 @@ class OpusDS(Device):
 
         self.set_state(PyTango.DevState.RUNNING)
 
-        if macro_args is not None:
-            nargs = len(macro_args)
-            ans = self._runOpusCmd("RUN_MACRON", "{0} {1}".format(macro_path,
-                                                                  nargs))
-
-            if "OK" not in ans.upper():
-                self.set_state(PyTango.DevState.ALARM)
-                self.set_status(ans)
-                return
-
-            for i in range(nargs):
-                self._runOpusCmd("WRITE_PARAMETER",
-                                 "{0} {1}".format(macro_args[i][0],
-                                                  macro_args[i][1]))
-        else:
-            ans = self._runOpusCmd("RUN_MACRON", macro_path)
-
-        if "OK\n" in ans.upper():
-            self._macro_id = ans.split('\n')[1]
-            self.opusState.enabledEv.set()
-        else:
-            self.set_state(PyTango.DevState.ALARM)
-            self.set_status(ans)
-
-    @command()
-    def runOpusMeasureSample(self):
-
         if self._xpm_filename is not None:
             macro = os.path.join(self.OPUS_MACRO_PATH, "MeasureSample.mtx")
             path = self.OPUS_MACRO_PATH
             file = self._xpm_filename
-            self.runOpusMacro(macro, [("pth", path), ("fil",file)])
+
+            cmd = "RUN_MACRO {0}  path {1} file {2}".format(macro,
+                                                            path,
+                                                            file)
+            ans = self._runOpusCmd(cmd)
+
+            if "OK\n" in ans.upper():
+                self._macro_id = ans.split('\n')[1]
+                self.opusState.enabledEv.set()
+            else:
+                self.set_state(PyTango.DevState.ALARM)
+                self.set_status(ans)
+
         else:
             msg = 'XPM file has not been set'
             self.set_status(msg)

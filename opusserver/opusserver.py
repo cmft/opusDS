@@ -19,7 +19,6 @@ class SocketListenerThread(Thread):
         self.clientsock = None
         self.createFileHandle()
         self._last_cmd = None
-        self._numParm = 0
 
     def runOpus(self):
         subprocess.call(['C:\Program Files (x86)\Bruker\OPUS_7.5.18\opus.exe',
@@ -107,22 +106,30 @@ class SocketListenerThread(Thread):
 
         cmd = "{0}\n".format(cmd)
         print("writing... {0}".format(cmd))
+        self._last_cmd = cmd
+
+        # Execute macros with arguments
+        if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd and len(cmd.split()) > 2:
+            return self._run_macro_with_args(cmd)
+
         win32file.WriteFile(self.fileHandle, cmd)
         time.sleep(1)
         print("Reading...")
-        if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd:
-            # Parse cmd to get the expected parameters
-            try:
-                self._numParm = int(a.rsplit(' ', 1)[1])
-            except ValueError:
-                self._numParm = 0
-        elif "WRITE_PARAMETER" in cmd and self._numParm > 0:
-            self._numParm -= 1
-            return "\n"
-        else:
-            self._numParm = 0
         data = self.readFileHandle()
-        self._last_cmd = cmd
+        print "Data: ", data
+        return "{0}\n".format(data)
+
+    def _run_macro_with_args(self, cmd):
+        # Run Opus macros with arguments
+        splitted_cmd = cmd.split()
+        nargs = (len(splitted_cmd)-2)/2
+        run_cmd = "{0} {1} {2}".format(splitted_cmd[0], splitted_cmd[1], nargs)
+        win32file.WriteFile(self.fileHandle, run_cmd)
+        for i in range(nargs):
+            run_cmd = "WRITE_PARAMETER {0} {1}".format(splitted_cmd[2 + i * 2],
+                                                       splitted_cmd[3 + i * 2])
+            win32file.WriteFile(self.fileHandle, run_cmd)
+        data = self.readFileHandle()
         print "Data: ", data
         return "{0}\n".format(data)
 
