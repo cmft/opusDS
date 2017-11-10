@@ -158,9 +158,7 @@ class OpusDS(Device):
             path = self.OPUS_MACRO_PATH
             file = self._xpm_filename
 
-            cmd = "RUN_MACRO {0} path {1} file {2}".format(macro,
-                                                           path,
-                                                           file)
+            cmd = "RUN_MACRO {0} pth {1} fil {2}".format(macro, path, file)
             ans = self._runOpusCmd(cmd)
 
             if "OK\n" in ans.upper():
