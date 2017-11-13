@@ -110,6 +110,7 @@ class SocketListenerThread(Thread):
 
         # Execute macros with arguments
         if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd and len(cmd.split()) > 2:
+            print "Run macro with args"
             return self._run_macro_with_args(cmd)
 
         win32file.WriteFile(self.fileHandle, cmd)
@@ -123,11 +124,13 @@ class SocketListenerThread(Thread):
         # Run Opus macros with arguments
         splitted_cmd = cmd.split()
         nargs = (len(splitted_cmd)-2)/2
-        run_cmd = "{0} {1} {2}".format(splitted_cmd[0], splitted_cmd[1], nargs)
+        run_cmd = "{0} {1} {2}\n".format(splitted_cmd[0], splitted_cmd[1], nargs)
+        print "write cmd", run_cmd
         win32file.WriteFile(self.fileHandle, run_cmd)
         for i in range(nargs):
-            run_cmd = "WRITE_PARAMETER {0} {1}".format(splitted_cmd[2 + i * 2],
-                                                       splitted_cmd[3 + i * 2])
+            run_cmd = "WRITE_PARAMETER {0} {1}\n".format(splitted_cmd[2 + i * 2].lower(),
+                                                         splitted_cmd[3 + i * 2])
+            print "write cmd", run_cmd
             win32file.WriteFile(self.fileHandle, run_cmd)
         data = self.readFileHandle()
         print "Data: ", data
