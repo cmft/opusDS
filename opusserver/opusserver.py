@@ -110,8 +110,13 @@ class SocketListenerThread(Thread):
 
         # Execute macros with arguments
         if "RUN_MACRO" in cmd or "STAR_MACRO" in cmd and len(cmd.split()) > 2:
-            print "Run macro with args"
             return self._run_macro_with_args(cmd)
+
+        if "READ_PKA" in cmd:
+            return self._read_param_from_selected("PKA")
+
+        if "UNLOAD_SELECTED_FILE" in cmd:
+            return self._unload_selected()
 
         win32file.WriteFile(self.fileHandle, cmd)
         time.sleep(1)
@@ -125,16 +130,47 @@ class SocketListenerThread(Thread):
         splitted_cmd = cmd.split()
         nargs = (len(splitted_cmd)-2)/2
         run_cmd = "{0} {1} {2}\n".format(splitted_cmd[0], splitted_cmd[1], nargs)
-        print "write cmd", run_cmd
         win32file.WriteFile(self.fileHandle, run_cmd)
         for i in range(nargs):
             run_cmd = "WRITE_PARAMETER {0} {1}\n".format(splitted_cmd[2 + i * 2].lower(),
                                                          splitted_cmd[3 + i * 2])
-            print "write cmd", run_cmd
             win32file.WriteFile(self.fileHandle, run_cmd)
         data = self.readFileHandle()
-        print "Data: ", data
         return "{0}\n".format(data)
+
+    def _read_param_from_selected(self, param):
+        """ Read parameter form the selected file
+
+            returns the read value or NaN
+        """
+        ans = self.parse_cmd("GET_SELECTED\n")
+        try:
+            if 'OK\n' in ans.upper():
+                alignment_file = ans.split('\n')[1].split()[0]
+        except IndexError:
+            return "There is not selected file\n"
+
+        self.parse_cmd("READ_FROM_FILE {0}\n".format(alignment_file))
+
+        self.parse_cmd("FILE_PARAMETERS\n")
+        ans = self.parse_cmd("READ_PARAMETER {0}\n".format(param))
+        if 'OK\n' in ans:
+            value = ans.split('\n')[1]
+        else:
+            value = "NaN"
+
+        return "{0}\n".format(value)
+
+    def _unload_selected(self):
+        """ Unload selected file in OPUS software"""
+        ans = self.parse_cmd("GET_SELECTED\n")
+        try:
+            if 'OK\n' in ans.upper():
+                alignment_file = ans.split('\n')[1].split()[0]
+                self.parse_cmd("UNLOAD_FILE {0}\n".format(alignment_file))
+        except IndexError:
+            pass
+        return "OK\n"
 
     def shutdown(self):
         if self.clientsock is not None:
