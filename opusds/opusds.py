@@ -19,7 +19,7 @@ class OpusState(Thread):
         Thread.__init__(self)
         self.opusDevice = opus
         self.stop = False
-        self.refreshPeriod = 0.3
+        self.refreshPeriod = 0.1
         self.enabledEv = Event()
 
     def run(self):
@@ -36,71 +36,77 @@ class OpusDS(Device):
     __metaclass__ = DeviceMeta
 
     IP = device_property(dtype=str)
-    OPUS_MACRO_PATH = device_property(dtype=str)
-    ALIGNMENT_SCAN_PATH = device_property(dtype=str)
-    ALIGNMENT_SCAN_FILENAME = device_property(dtype=str)
 
     def init_device(self):
+        self.info_stream('init_device')
         Device.init_device(self)
-        self._resetArgs()
         self.opusState = OpusState(self)
-        self._createSocket()
+        # connect socket
+        self.sock = None
+        self._connectSocket()
+        # reset Opus macro_id
+        self._macro_id = None
+        self._last_cmd = "None"
 
     def delete_device(self):
-        self.info_stream('OpusDS.delete_device')
+        self.info_stream('delete_device')
         # Close socket
-        self.sock.shutdown(socket.SHUT_RDWR)
-        self.sock.close()
-        # Stop thead
+        if self.sock is not None:
+            self.sock.shutdown(socket.SHUT_RDWR)
+            self.sock.close()
+        # Stop thread
         self.opusState.stop = True
         self.opusState.enabledEv.set()
         self.opusState.join()
 
-    def _resetArgs(self):
-        self._macro_id = None
-        self._cmd = None
-        self._xpm_filename = None
-        # self._macro_filename = None
-        self._args = None
-        # self._n_args = None
-
-    def _createSocket(self):
-        # create socket connection
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_address = (self.IP, 5000)
-        self.sock.settimeout(3)
+    def _connectSocket(self):
+        if self.sock is None:
+            # create socket
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(5)
+        # Try to connect the socket
         try:
-            self.sock.connect(server_address)
-            self._setStateOn()
+            self.sock.connect(self.IP)
+            self.isConnected = True
+            self.info_stream('Connected to %s sever'
+                             % self.server_address)
+            self._setStatusReady()
         except:
-            self.set_state(PyTango.DevState.FAULT)
-            self.set_status('The DS could not connect to the Opus server')
+            self.isConnected = False
+            self.info_stream('Can not connect to %s sever'
+                             % self.server_address)
+            self.set_state(PyTango.DevState.ALARM)
+            self.set_status('Could not connect to the server')
 
-    def _runOpusCmd(self, cmd, args=None):
-        if not args in (None, ""):
-            opus_cmd = "{0} {1}".format(cmd.upper(), args)
-        else:
-            opus_cmd = "{0}".format(cmd.upper())
-        try:
-            self.sock.sendall(opus_cmd + '\n')
-            ans = self.sock.recv(4096)
-            return ans
-        except:
-            self.set_state(PyTango.DevState.FAULT)
-            msg = 'Could not connect with the opus server'
-            self.set_status(msg)
-            raise Exception(msg)
+    def _reconnectSocket(self):
+        self.sock.close()
+        self.sock = None
+        self._connectSocket()
+
+    def _runOpusCmd(self, cmd):
+        self.sock.sendall(cmd + '\n')
+        ans = self.sock.recv(4096)
+        return ans
 
     def _isRunOpusCmdAllowed(self):
-        return self.get_state() in (PyTango.DevState.ON, PyTango.DevState.ALARM)
+        return self.get_state() in (PyTango.DevState.ON,
+                                    PyTango.DevState.ALARM)
 
-    def _setStateOn(self):
+    def _serverIsNotConnected(self):
+        self.set_state(PyTango.DevState.ALARM)
+        self.set_status('Can not connect to the server')
+
+    def _setStatusRunning(self, cmd):
+        self.set_state(PyTango.DevState.RUNNING)
+        self.set_status('Running cmd: {0}'.format(cmd))
+
+    def _setStatusReady(self):
         self.set_state(PyTango.DevState.ON)
         self.set_status('Ready')
 
     def _getMacroState(self):
         if self._macro_id is not None:
-            ans = self._runOpusCmd("MACRO_RESULTS", self._macro_id)
+            ans = self._runOpusCmd("MACRO_RESULTS {0}".format(self._macro_id))
             if 'OK\n' in ans.upper():
                 if int(ans.split('\n')[1]) == 1:
                     self._setStateOn()
@@ -112,130 +118,64 @@ class OpusDS(Device):
                 self.set_status('Error reading macro status')
 
     ###########################################################################
-    # Attributes
-    ###########################################################################
-
-    @attribute(label="macro_id", dtype=str)
-    def macro_id(self):
-        return self._macro_id
-
-    # TODO replace  by dynamic attributes
-    @attribute(label="args", dtype=str)
-    def args(self):
-        return self._args
-
-    @args.write
-    def args(self, args):
-        self._args = args
-
-    @attribute(label="xpm_filename", dtype=str)
-    def xpm_filename(self):
-        return self._xpm_filename
-
-    @xpm_filename.write
-    def xpm_filename(self, filename):
-        self._xpm_filename = filename
-
-    ###########################################################################
     # Commands
     ###########################################################################
-    @command()
+
+    @command(dtype_out=bool)
     def connect(self):
-        self._createSocket()
+        try:
+            # Evaluate the connection
+            self._runOpusCmd('s_pipe')
+        except:
+            # Try to reconnect the socket
+            self._reconnectSocket()
+        return self.isConnected
+
+    @command(dtype_in=str)
+    def runOpusMacro(self, macro_path):
+        if self.isConnected:
+            if self._isRunOpusCmdAllowed():
+                self._last_cmd = "RUN_MACRO {0}".format(macro_path)
+                self._setStatusRunning(self._last_cmd)
+                ans = self._runOpusCmd(self._last_cmd)
+                if "OK\n" in ans.upper():
+                    self._macro_id = ans.split('\n')[1]
+                else:
+                    self._macro_id = None
+                    self.set_state(PyTango.DevState.ALARM)
+                    self.set_status('Problem running macro: {0}'.format(ans))
+        else:
+            self._serverIsNotConnected()
 
     @command()
-    def runOpusMeasureSample(self):
-        if not self._isRunOpusCmdAllowed:
-            msg = 'The device is {0}.\n' \
-                  'The RUN_MACRO command can ' \
-                  'not be executed'.format(self.get_state())
-            raise Exception(msg)
-
-        self.set_state(PyTango.DevState.RUNNING)
-
-        if self._xpm_filename is not None:
-            macro = os.path.join(self.OPUS_MACRO_PATH, "MeasureSample.mtx")
-            path = self.OPUS_MACRO_PATH
-            file = self._xpm_filename
-
-            cmd = "RUN_MACRO {0} pth {1} fil {2}".format(macro, path, file)
-            ans = self._runOpusCmd(cmd)
-
-            if "OK\n" in ans.upper():
-                self._macro_id = ans.split('\n')[1]
-                self.opusState.enabledEv.set()
-            else:
-                self.set_state(PyTango.DevState.ALARM)
-                self.set_status(ans)
-
+    def stopOpusMacro(self):
+        if self.isConnected:
+            if self._macro_id is not None:
+                self._last_cmd = "KILL_MACRO {0}".format(self._macro_id)
+                self._setStatusRunning(self._last_cmd)
+                ans = self._runOpusCmd(self._last_cmd)
+                self._macro_id = None
         else:
-            msg = 'XPM file has not been set'
-            self.set_status(msg)
-            self.set_state(PyTango.DevState.ALARM)
-            raise Exception(msg)
-
-    @command(dtype_out=float)
-    def readPKA(self):
-        if not self._isRunOpusCmdAllowed:
-            msg = 'The device is {0}.\n' \
-                  'The OPUS command can ' \
-                  'not be executed'.format(self.get_state())
-            raise Exception(msg)
-
-        # TODO
-        alignment_file = os.path.join(self.ALIGNMENT_SCAN_PATH,
-                                      self.ALIGNMENT_SCAN_FILENAME)
-        ans = self._runOpusCmd("READ_FROM_FILE {0}".format(alignment_file))
-        # file_id = ans.split('\n')[1]
-
-        self._runOpusCmd("FILE_PARAMETERS")
-        self.set_state(PyTango.DevState.RUNNING)
-        ans = self._runOpusCmd("READ_PARAMETER", "PKA")
-        if 'OK\n' in ans:
-            self._setStateOn()
-            pka = float(ans.split('\n')[1])
-        else:
-            self.set_state(PyTango.DevState.ALARM)
-            pka = float("NaN")
-
-        self._runOpusCmd("UNLOAD_FILE {0}".format(alignment_file))
-
-        return pka
-
-    @command()
-    def abortMacro(self):
-        if self._macro_id is not None:
-            self._runOpusCmd("KILL_MACRO",self._macro_id)
-            self._setStateOn()
-        else:
-            msg = 'There is not any macro running'
-            self.set_status(msg)
-            self.set_state(PyTango.DevState.ALARM)
-
-    # @command()
-    # def loadOpusMacro(self):
-    #     # TODO parse opus macro
-    #     # create dynamic attribute
-    #     # emit interfaceChange event
+            self._serverIsNotConnected()
 
     @command(dtype_in=str, dtype_out=str)
-    def runOpusCmd(self, cmd):
-        if not self._isRunOpusCmdAllowed:
-            msg = 'The device is {0}.\n' \
-                  'The OPUS command can ' \
-                  'not be executed'.format(self.get_state())
-            raise Exception(msg)
-
-        splited_cmd = cmd.split(" ", 1)
-        if len(splited_cmd) > 1:
-            args = splited_cmd[1]
+    def runOpusCMD(self, cmd):
+        if self.isConnected:
+            if self._isRunOpusCmdAllowed():
+                self._setStatusRunning(cmd)
+                self._last_cmd = cmd.upper()
+                ans = self._runOpusCmd(self._last_cmd)
+                self._setStatusReady()
+                return ans
+            else:
+                raise Exception("CMD  %s can not be executed. Check the state"
+                                % cmd)
         else:
-            args = None
-        opus_cmd = splited_cmd[0]
+            self._serverIsNotConnected()
 
-        ans = self._runOpusCmd(opus_cmd, args)
-        return ans
-
+    # ###########################################################################
+    # # Attributes
+    # ###########################################################################
 
 def runDS():
     run((OpusDS,))
