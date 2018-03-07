@@ -109,7 +109,7 @@ class OpusDS(Device):
             ans = self._runOpusCmd("MACRO_RESULTS {0}".format(self._macro_id))
             if 'OK\n' in ans.upper():
                 if int(ans.split('\n')[1]) == 1:
-                    self._setStateOn()
+                    self._setStatusReady()
                 else:
                     self.set_state(PyTango.DevState.RUNNING)
                     self.set_status('Running macro {0}'.format(self._macro_id))
