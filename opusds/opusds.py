@@ -13,7 +13,6 @@ from PyTango.server import (run,
                             device_property)
 
 
-
 class OpusState(Thread):
     def __init__(self, opus):
         Thread.__init__(self)
@@ -27,7 +26,7 @@ class OpusState(Thread):
         while not self.stop:
             time.sleep(self.refreshPeriod)
             self.opusDevice._getMacroState()
-            if self.opusDevice.get_state() == PyTango.DevState.RUNNING:
+            if not self.opusDevice.get_state() == PyTango.DevState.RUNNING:
                 self.enabledEv.clear()
                 self.enabledEv.wait()
 
@@ -41,12 +40,17 @@ class OpusDS(Device):
         self.info_stream('init_device')
         Device.init_device(self)
         self.opusState = OpusState(self)
+        self.server_address = (self.IP, 5000)
+
         # connect socket
         self.sock = None
         self._connectSocket()
         # reset Opus macro_id
         self._macro_id = None
         self._last_cmd = "None"
+
+        if not self.opusState.isAlive():
+            self.opusState.start()
 
     def delete_device(self):
         self.info_stream('delete_device')
@@ -66,15 +70,15 @@ class OpusDS(Device):
             self.sock.settimeout(5)
         # Try to connect the socket
         try:
-            self.sock.connect(self.IP)
+            self.sock.connect(self.server_address)
             self.isConnected = True
             self.info_stream('Connected to %s sever'
-                             % self.server_address)
+                             % self.IP)
             self._setStatusReady()
-        except:
+        except Exception as e:
             self.isConnected = False
-            self.info_stream('Can not connect to %s sever'
-                             % self.server_address)
+            self.info_stream('Could not connect to %s sever. Reason: %r'
+                             % (self.IP, e))
             self.set_state(PyTango.DevState.ALARM)
             self.set_status('Could not connect to the server')
 
@@ -107,9 +111,11 @@ class OpusDS(Device):
     def _getMacroState(self):
         if self._macro_id is not None:
             ans = self._runOpusCmd("MACRO_RESULTS {0}".format(self._macro_id))
+            self.info_stream('macroState %s' % ans)
             if 'OK\n' in ans.upper():
                 if int(ans.split('\n')[1]) == 1:
                     self._setStatusReady()
+                    self.info_stream('Macro %s has finished' % self._macro_id)
                 else:
                     self.set_state(PyTango.DevState.RUNNING)
                     self.set_status('Running macro {0}'.format(self._macro_id))
@@ -140,6 +146,7 @@ class OpusDS(Device):
                 ans = self._runOpusCmd(self._last_cmd)
                 if "OK\n" in ans.upper():
                     self._macro_id = ans.split('\n')[1]
+                    self.opusState.enabledEv.set()
                 else:
                     self._macro_id = None
                     self.set_state(PyTango.DevState.ALARM)
@@ -160,6 +167,10 @@ class OpusDS(Device):
 
     @command(dtype_in=str, dtype_out=str)
     def runOpusCMD(self, cmd):
+        cmd = cmd.upper()
+        if cmd.startswith("RUN_MACRO"):
+            raise Exception("runOpusCMD can not execute async commands")
+
         if self.isConnected:
             if self._isRunOpusCmdAllowed():
                 self._setStatusRunning(cmd)
@@ -173,12 +184,14 @@ class OpusDS(Device):
         else:
             self._serverIsNotConnected()
 
-    # ###########################################################################
-    # # Attributes
-    # ###########################################################################
+    ###########################################################################
+    ## Attributes
+    ###########################################################################
+
 
 def runDS():
     run((OpusDS,))
+
 
 if __name__ == "__main__":
     runDS()
