@@ -158,6 +158,8 @@ class SocketListenerThread(Thread):
             value = ans.split('\n')[1]
         else:
             value = "NaN"
+        # Unload selected file
+        self._unload_selected()
 
         return "{0}\n".format(value)
 
