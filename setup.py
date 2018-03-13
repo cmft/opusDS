@@ -6,13 +6,12 @@ from setuptools import setup, find_packages
 # Do not update manually
 __version = '0.1.0'
 
-long_description = """ This is a DS to remotely manipulate the OPUS
-Spectroscopy Software (BRUKER) from linux to Windows.
+long_description = """This is a DS to remotely manipulate the OPUS
+Spectroscopy Software (BRUKER) from Linux to Windows.
 
 The device server send OPUS commands to a socket sever (opusserver) included in
 the project)  that must be run in the same machine that the OPUS Spectroscopy
-Software, the server set the communication with the software via a named PIPE.
-"""
+Software, the server set the communication with the software via a named PIPE."""
 
 
 classifiers = [
