@@ -31,6 +31,17 @@ class OpusState(Thread):
                 self.enabledEv.wait()
 
 
+class OpusAsyncCMD(Thread):
+    def __init__(self, opus, cmd):
+        Thread.__init__(self)
+        self.opusDevice = opus
+        self.cmd = cmd
+
+    def run(self):
+        self.opusDevice._runOpusCmd(self.cmd)
+        self.opusDevice._setStatusReady()
+
+
 class OpusDS(Device):
     __metaclass__ = DeviceMeta
 
@@ -48,6 +59,7 @@ class OpusDS(Device):
         # reset Opus macro_id
         self._macro_id = None
         self._last_cmd = "None"
+        self._ans = None
 
         if not self.opusState.isAlive():
             self.opusState.start()
@@ -67,7 +79,7 @@ class OpusDS(Device):
         if self.sock is None:
             # create socket
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(5)
+            self.sock.settimeout(10)
         # Try to connect the socket
         try:
             self.sock.connect(self.server_address)
@@ -88,9 +100,15 @@ class OpusDS(Device):
         self._connectSocket()
 
     def _runOpusCmd(self, cmd):
-        self.sock.sendall(cmd + '\n')
-        ans = self.sock.recv(4096)
-        return ans
+        try:
+            self.sock.sendall(cmd + '\n')
+            ans = self.sock.recv(4096)
+            self._ans = ans
+            return ans
+        except Exception as e:
+            self.set_state(PyTango.DevState.ALARM)
+            self.set_status(str(e))
+            raise e
 
     def _isRunOpusCmdAllowed(self):
         return self.get_state() in (PyTango.DevState.ON,
@@ -165,8 +183,10 @@ class OpusDS(Device):
         else:
             self._serverIsNotConnected()
 
-    @command(dtype_in=str, dtype_out=str)
+    @command(dtype_in=str)
     def runOpusCMD(self, cmd):
+        # reset old output
+        self._ans = None
         cmd = cmd.upper()
         if cmd.startswith("RUN_MACRO"):
             raise Exception("runOpusCMD can not execute async commands")
@@ -175,14 +195,17 @@ class OpusDS(Device):
             if self._isRunOpusCmdAllowed():
                 self._setStatusRunning(cmd)
                 self._last_cmd = cmd.upper()
-                ans = self._runOpusCmd(self._last_cmd)
-                self._setStatusReady()
-                return ans
+                t = OpusAsyncCMD(self, self._last_cmd)
+                t.start()
             else:
                 raise Exception("CMD  %s can not be executed. Check the state"
                                 % cmd)
         else:
             self._serverIsNotConnected()
+
+    @command(dtype_out=str)
+    def getLastOpusOutput(self):
+        return str(self._ans)
 
     ###########################################################################
     ## Attributes
