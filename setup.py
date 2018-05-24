@@ -27,7 +27,7 @@ setup(
     version=__version,
     packages=find_packages(),
     entry_points={
-        'console_scripts': ['opusDs = opusds.opusds:runDS']
+        'console_scripts': ['opusDS = opusds.opusds:runDS']
     }, # METADATA
     author='Carlos Falcon',
     author_email='cfalcon@cells.es',
