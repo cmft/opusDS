@@ -125,6 +125,7 @@ class OpusDS(Device):
     def _setStatusReady(self):
         self.set_state(PyTango.DevState.ON)
         self.set_status('Ready')
+        # TODO: add push event
 
     def _getMacroState(self):
         if self._macro_id is not None:
@@ -146,7 +147,7 @@ class OpusDS(Device):
     ###########################################################################
 
     @command(dtype_out=bool)
-    def connect(self):
+    def connectSocket(self):
         try:
             # Evaluate the connection
             self._runOpusCmd('s_pipe')
@@ -187,16 +188,33 @@ class OpusDS(Device):
     def runOpusCMD(self, cmd):
         # reset old output
         self._ans = None
-        cmd = cmd.upper()
         if cmd.startswith("RUN_MACRO"):
             raise Exception("runOpusCMD can not execute async commands")
 
         if self.isConnected:
             if self._isRunOpusCmdAllowed():
                 self._setStatusRunning(cmd)
-                self._last_cmd = cmd.upper()
+                self._last_cmd = cmd #cmd.upper()
                 t = OpusAsyncCMD(self, self._last_cmd)
                 t.start()
+            else:
+                raise Exception("CMD  %s can not be executed. Check the state"
+                                % cmd)
+        else:
+            self._serverIsNotConnected()
+
+    @command(dtype_in=str, dtype_out=str)
+    def runOpusCMDSync(self, cmd):
+        # reset old output
+        self._ans = None
+
+        if self.isConnected:
+            if self._isRunOpusCmdAllowed():
+                self._setStatusRunning(cmd)
+                ans = self._runOpusCmd(cmd)
+                self._setStatusReady()
+                self._last_cmd = cmd
+                return str(ans)
             else:
                 raise Exception("CMD  %s can not be executed. Check the state"
                                 % cmd)
