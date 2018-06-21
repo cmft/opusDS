@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 # The version is updated automatically with bumpversion
 # Do not update manually
-__version = '0.2.1-alpha'
+__version = '0.2.2-alpha'
 
 long_description = """The Opus socket-server offers network bridge to
 manipulate the OPUS Spectroscopy Software (BRUKER).
